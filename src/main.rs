@@ -85,7 +85,7 @@ fn parse_int(input: &str) -> IResult<&str, Type> {
 }
 
 fn parse_array(input: &str) -> IResult<&str, Type> {
-    map(preceded(tag("[]"), parse_int), |kind| {
+    map(preceded(tag("[]"), alt((parse_int, parse_array))), |kind| {
         Type::Array(Box::new(kind))
     })(input)
 }
@@ -188,6 +188,6 @@ fn parse_ast(input: &str) -> IResult<&str, Vec<Ast>> {
 
 fn main() {
     let input = include_str!("../input.k");
-    let ast = parse_ast(input).unwrap();
+    let ast = parse_ast(input);
     println!("{ast:#?}");
 }
