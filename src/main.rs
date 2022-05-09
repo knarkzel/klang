@@ -1,17 +1,14 @@
 use nom::{
     branch::alt,
-    bytes::complete::take_until,
+    bytes::complete::{take_until, tag},
     character::complete::{alpha1, digit1, multispace0, multispace1},
     combinator::{map, opt},
     multi::{many0, separated_list0},
     sequence::{delimited, preceded, terminated, tuple},
+    IResult,
 };
 
-use nom_supreme::{error::ErrorTree, final_parser::final_parser, tag::complete::tag};
-
 // Helpers
-type IResult<'a, T, U> = nom::IResult<T, U, ErrorTree<&'a str>>;
-
 fn ws<'a, F: 'a, O>(inner: F) -> impl FnMut(&'a str) -> IResult<&'a str, O>
 where
     F: FnMut(&'a str) -> IResult<&'a str, O>,
@@ -189,12 +186,8 @@ fn parse_ast(input: &str) -> IResult<&str, Vec<Ast>> {
     ))))(input)
 }
 
-fn parse(input: &str) -> Result<Vec<Ast>, ErrorTree<&str>> {
-    final_parser(parse_ast)(input)
-}
-
 fn main() {
     let input = include_str!("../input.k");
-    let ast = parse(input).unwrap();
+    let ast = parse_ast(input).unwrap();
     println!("{ast:#?}");
 }
