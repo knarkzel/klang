@@ -1,12 +1,15 @@
+#![feature(let_chains)]
+
 use nom::{
     branch::alt,
-    bytes::complete::{take_until, tag},
+    bytes::complete::{tag, take_until},
     character::complete::{alpha1, digit1, multispace0, multispace1},
     combinator::{map, opt},
     multi::{many0, separated_list0},
     sequence::{delimited, preceded, terminated, tuple},
     IResult,
 };
+use std::collections::HashMap;
 
 // Helpers
 fn ws<'a, F: 'a, O>(inner: F) -> impl FnMut(&'a str) -> IResult<&'a str, O>
@@ -17,20 +20,20 @@ where
 }
 
 // Ast
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Type {
     Void,
     Integer,
     Array(Box<Type>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Operator {
     Assignment,
     PlusEquals,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Ast {
     // Low level
     Type(Type),
@@ -61,7 +64,7 @@ enum Ast {
         name: Box<Ast>,
         variable: Box<Ast>,
         body: Vec<Ast>,
-    }
+    },
 }
 
 // Low level parsers
@@ -109,7 +112,13 @@ fn parse_body(input: &str) -> IResult<&str, Vec<Ast>> {
 
 // High level parsers
 fn parse_value(input: &str) -> IResult<&str, Ast> {
-    alt((parse_call, parse_list, parse_string, parse_name, parse_number))(input)
+    alt((
+        parse_call,
+        parse_list,
+        parse_string,
+        parse_name,
+        parse_number,
+    ))(input)
 }
 
 fn parse_list(input: &str) -> IResult<&str, Ast> {
@@ -186,8 +195,86 @@ fn parse_ast(input: &str) -> IResult<&str, Vec<Ast>> {
     ))))(input)
 }
 
+// Interpreter
+use anyhow::{bail, Error};
+use fehler::throws;
+
+#[throws]
+fn void() -> Ast {
+    Ast::Type(Type::Void)
+}
+
+#[derive(Debug)]
+struct Interpreter {
+    context: HashMap<String, Ast>,
+}
+
+impl Interpreter {
+    fn new() -> Self {
+        Self {
+            context: HashMap::new(),
+        }
+    }
+
+    #[throws]
+    fn eval(&mut self, ast: Ast) -> Ast {
+        match ast {
+            Ast::Type(_)
+            | Ast::Number(_)
+            | Ast::String(_)
+            | Ast::Operator(_)
+            | Ast::List(_)
+            | Ast::Return(_) => ast,
+            Ast::Name(name) => {
+                if let Some(ast) = self.context.get(&name) {
+                    ast.clone()
+                } else {
+                    bail!("Invalid identifier: {name}")
+                }
+            }
+            Ast::Statement {
+                name,
+                operator,
+                value,
+            } => {
+                let value = self.eval(*value)?;
+                match (*name, *operator) {
+                    (Ast::Name(name), Ast::Operator(Operator::Assignment)) => {
+                        self.context.insert(name, value);
+                    },
+                    (Ast::Name(name), Ast::Operator(Operator::PlusEquals)) => {
+                        if let Some(Ast::Number(lhs)) = self.context.get_mut(&name) && let Ast::Number(rhs) = value {
+                            *lhs += rhs;
+                        }
+                    }
+                    _ => bail!("Failed to match `statement`"),
+                }
+                void()?
+            }
+            Ast::Call { name, args } => todo!(),
+            Ast::Function {
+                name,
+                args,
+                returns,
+                body,
+            } => todo!(),
+            Ast::For {
+                name,
+                variable,
+                body,
+            } => todo!(),
+        }
+    }
+}
+
+#[throws]
 fn main() {
     let input = include_str!("../input.k");
-    let ast = parse_ast(input);
+    let (_, ast) = parse_ast(input).unwrap();
     println!("{ast:#?}");
+    let mut interpreter = Interpreter::new();
+    for item in ast {
+        interpreter.eval(item)?;
+    }
+    dbg!(&interpreter);
 }
