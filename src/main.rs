@@ -9,7 +9,7 @@ use nom::{
     sequence::{delimited, preceded, terminated, tuple},
     IResult,
 };
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 
 // Helpers
 fn ws<'a, F: 'a, O>(inner: F) -> impl FnMut(&'a str) -> IResult<&'a str, O>
@@ -27,10 +27,29 @@ enum Type {
     Array(Box<Type>),
 }
 
+impl Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Type::Void => write!(f, "void"),
+            Type::Integer => write!(f, "int"),
+            Type::Array(item) => write!(f, "[]{item}"),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 enum Operator {
     Assignment,
     PlusEquals,
+}
+
+impl Display for Operator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Operator::Assignment => write!(f, "="),
+            Operator::PlusEquals => write!(f, "+="),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -65,6 +84,42 @@ enum Ast {
         variable: Box<Ast>,
         body: Vec<Ast>,
     },
+}
+
+impl Display for Ast {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Ast::Type(item) => write!(f, "{item}"),
+            Ast::Number(number) => write!(f, "{number}"),
+            Ast::Name(name) => write!(f, "{name}"),
+            Ast::String(string) => write!(f, "\"{string}\""),
+            Ast::Operator(item) => write!(f, "{item}"),
+            Ast::Return(item) => write!(f, "return {item}"),
+            Ast::List(items) => {
+                write!(f, "[")?;
+                for (i, item) in items.iter().enumerate() {
+                    write!(f, "{item},")?;
+                    if i < items.len() {
+                        write!(f, " ")?;
+                    }
+                }
+                write!(f, "]")
+            },
+            Ast::Statement { name, operator, value } => write!(f, "{name} {operator} {value}"),
+            Ast::Call { name, args } => {
+                write!(f, "{name}(")?;
+                for (i, arg) in args.iter().enumerate() {
+                    write!(f, "{arg},")?;
+                    if i < args.len() {
+                        write!(f, " ")?;
+                    }
+                }
+                write!(f, ")")
+            },
+            Ast::Function { name, args, returns, body } => todo!(),
+            Ast::For { name, variable, body } => todo!(),
+        }
+    }
 }
 
 // Low level parsers
@@ -251,7 +306,18 @@ impl Interpreter {
                 }
                 void()?
             }
-            Ast::Call { name, args } => todo!(),
+            Ast::Call { name, args } => {
+                match *name {
+                    Ast::Name(name) if name.as_str() == "print" => {
+                        for arg in args {
+                            let value = self.eval(arg)?;
+                            println!("{value}");
+                        }
+                    }
+                    _ => bail!("Failed to match `call`"),
+                }
+                void()?
+            }
             Ast::Function {
                 name,
                 args,
@@ -270,11 +336,9 @@ impl Interpreter {
 #[throws]
 fn main() {
     let input = include_str!("../input.k");
-    let (_, ast) = parse_ast(input).unwrap();
-    println!("{ast:#?}");
+    let (_, ast) = parse_ast(input)?;
     let mut interpreter = Interpreter::new();
     for item in ast {
         interpreter.eval(item)?;
     }
-    dbg!(&interpreter);
 }
